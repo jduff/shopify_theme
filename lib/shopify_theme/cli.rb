@@ -5,19 +5,21 @@ require 'base64'
 require 'fileutils'
 require 'json'
 require 'fssm'
+require 'sass'
 
 module ShopifyTheme
   class Cli < Thor
     include Thor::Actions
 
     BINARY_EXTENSIONS = %w(png gif jpg jpeg eot svg ttf woff swf)
+    SASS_EXTENSION = /\.s[ca]ss?$/
     IGNORE = %w(config.yml)
 
     tasks.keys.abbrev.each do |shortcut, command|
       map shortcut => command.to_sym
     end
 
-    desc "configure API_KEY PASSWORD STORE", "generate a config file for the store to connect to"
+    desc "configure API_KEY PASSWORD STORE_URL", "generate a config file for the store to connect to"
     def configure(api_key=nil, password=nil, store=nil)
       config = {:api_key => api_key, :password => password, :store => store}
       create_file('config.yml', config.to_yaml)
@@ -77,7 +79,11 @@ module ShopifyTheme
     def watch
       FSSM.monitor '.' do |m|
         m.update do |base, relative|
-          send_asset(relative, options['quiet']) if local_assets_list.include?(relative)
+	        if !ignored_files.include?(relative)
+	          send_asset(relative, options['quiet']) if local_assets_list.include?(relative)
+	        else
+	          ignored_files.delete(relative)
+	        end
         end
         m.create do |base, relative|
           send_asset(relative, options['quiet']) if local_assets_list.include?(relative)
@@ -91,6 +97,10 @@ module ShopifyTheme
     end
 
     private
+
+    def ignored_files
+      @ignored_files ||= []
+    end
 
     def local_assets_list
       Dir.glob(File.join("**", "*")).reject{ |p| File.directory?(p) || IGNORE.include?(p)}
@@ -111,6 +121,8 @@ module ShopifyTheme
 
     def send_asset(asset, quiet=false)
       data = {:key => asset}
+      compile_asset(asset, quiet)
+	    
       if (content = File.read(asset)).is_binary_data? || BINARY_EXTENSIONS.include?(File.extname(asset).gsub('.',''))
         data.merge!(:attachment => Base64.encode64(content))
       else
@@ -123,8 +135,28 @@ module ShopifyTheme
         say("Error: Could not upload #{asset}", :red)
       end
     end
-    
+
+		def compile_asset(asset, quiet=false)
+	    if asset =~ SASS_EXTENSION
+				begin
+					original_asset = asset
+					sass_engine = Sass::Engine.for_file(asset,{})
+					asset.gsub!(SASS_EXTENSION, '.css')
+					ignored_files.push(asset)
+					File.open(asset, 'w') {|f| f.write(sass_engine.render)}
+					notify "#{original_asset} => #{asset}", :title => 'Rendered SASS', :icon => ICON unless quiet
+					say("Rendered SASS: #{original_asset} => #{asset}", :magenta) unless quiet
+					true
+				rescue Sass::SyntaxError => e
+					notify "#{e.sass_filename}:#{e.sass_line} - \n #{e.message}", :title => 'Syntax Error', :icon => ICON unless quiet
+					say("#{e.sass_filename}:#{e.sass_line} - #{e.message}", :red) unless quiet
+					false
+				end
+		  end
+		end
+
     def delete_asset(key, quiet=false)
+			return if key =~ SASS_EXTENSION
 			if ShopifyParty.delete_asset(key).success?
         say("Removed: #{key}", :green) unless quiet
       else
