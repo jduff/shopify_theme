@@ -14,7 +14,8 @@ module ShopifyTheme
     BINARY_EXTENSIONS = %w(png gif jpg jpeg eot svg ttf woff swf)
     SASS_EXTENSION = /\.s[ca]ss?$/
     IGNORE = %w(config.yml)
-
+    ICON = File.dirname(__FILE__) + '/images/shopify.png'
+		
     tasks.keys.abbrev.each do |shortcut, command|
       map shortcut => command.to_sym
     end
@@ -23,6 +24,8 @@ module ShopifyTheme
     def configure(api_key=nil, password=nil, store=nil)
       config = {:api_key => api_key, :password => password, :store => store}
       create_file('config.yml', config.to_yaml)
+	    say("Generated config.yml", :green)
+	    notify "config.yml", :title => 'Config Generated', :icon => ICON
     end
 
     desc "download FILE", "download the shops current theme assets"
@@ -48,7 +51,7 @@ module ShopifyTheme
     end
     
     desc "replace FILE", "completely replace shop theme assets with local theme assets"
-    method_option :quiet, :type => :boolean, :default => false
+    method_option :quiet, :type => :boolean, :default => true
     def replace(*keys)
 	    say("Are you sure you want to completely replace your shop theme assets? This is not undoable.", :yellow)
 	    if ask("Continue? (Y/N): ") == "Y"
@@ -58,8 +61,9 @@ module ShopifyTheme
 	      end
 	      local_assets = keys.empty? ? local_assets_list : keys
 	      local_assets.each do |asset|
-	        send_asset(asset, options['quiet'])
+	        send_asset(asset, true)
 	      end
+	      notify "#{remote_assets.size} Removed \n #{remote_assets.size} Uploaded", :title => 'Replaced Assets', :icon => ICON unless options['quiet']
 	      say("Done.", :green) unless options['quiet']
 		  end
     end
@@ -121,19 +125,20 @@ module ShopifyTheme
 
     def send_asset(asset, quiet=false)
       data = {:key => asset}
-      compile_asset(asset, quiet)
-	    
-      if (content = File.read(asset)).is_binary_data? || BINARY_EXTENSIONS.include?(File.extname(asset).gsub('.',''))
-        data.merge!(:attachment => Base64.encode64(content))
-      else
-        data.merge!(:value => content)
-      end
-
-      if ShopifyParty.send_asset(data).success?
-        say("Uploaded: #{asset}", :green) unless quiet
-      else
-        say("Error: Could not upload #{asset}", :red)
-      end
+      if compile_asset(asset, quiet)  
+	      if (content = File.read(asset)).is_binary_data? || BINARY_EXTENSIONS.include?(File.extname(asset).gsub('.',''))
+	        data.merge!(:attachment => Base64.encode64(content))
+	      else
+	        data.merge!(:value => content)
+	      end
+	
+	      if ShopifyParty.send_asset(data).success?
+	        say("Uploaded: #{asset}", :green) unless quiet
+	       	notify "#{asset}", :title => 'Uploaded Asset', :icon => ICON unless quiet
+	      else
+	        say("Error: Could not upload #{asset}", :red)
+	      end
+      end   
     end
 
 		def compile_asset(asset, quiet=false)
@@ -153,6 +158,7 @@ module ShopifyTheme
 					false
 				end
 		  end
+		  true
 		end
 
     def delete_asset(key, quiet=false)
@@ -163,5 +169,18 @@ module ShopifyTheme
         say("Error: Could not remove #{key}", :red)
       end
     end    
+
+    def notify(message, options={})
+      return super if @growl_loaded
+      return if @growl_tried
+      begin
+        require 'growl'
+        self.class.send(:include, Growl)
+        @growl_loaded = true
+      rescue LoadError => e
+        @growl_tried = true
+        say("Growl not found: gem install growl to receive notifications")
+      end
+    end
   end
 end
