@@ -9,13 +9,14 @@ require 'sass'
 
 module ShopifyTheme
   class Cli < Thor
+
     include Thor::Actions
 
     BINARY_EXTENSIONS = %w(png gif jpg jpeg eot svg ttf woff swf)
     SASS_EXTENSION = /\.s[ca]ss?$/
     IGNORE = %w(config.yml)
     ICON = File.dirname(__FILE__) + '/images/shopify.png'
-		
+
     tasks.keys.abbrev.each do |shortcut, command|
       map shortcut => command.to_sym
     end
@@ -49,7 +50,7 @@ module ShopifyTheme
       end
       say("Done.", :green) unless options['quiet']
     end
-    
+
     desc "replace FILE", "completely replace shop theme assets with local theme assets"
     method_option :quiet, :type => :boolean, :default => true
     def replace(*keys)
@@ -94,7 +95,7 @@ module ShopifyTheme
         end
         if !options['keep_files']
 	        m.delete do |base, relative|
-						delete_asset(relative, options['quiet'])					
+						delete_asset(relative, options['quiet'])
 		      end
 	      end
       end
@@ -131,13 +132,17 @@ module ShopifyTheme
 	      else
 	        data.merge!(:value => content)
 	      end
-	
-	      if ShopifyParty.send_asset(data).success?
-	        say("Uploaded: #{asset}", :green) unless quiet
-	       	notify "#{asset}", :title => 'Uploaded Asset', :icon => ICON unless quiet
-	      else
-	        say("Error: Could not upload #{asset}", :red)
-	      end
+
+        response = ShopifyParty.send_asset(data)      
+        if response.success?
+          notify "#{asset}", :title => 'Uploaded Asset', :icon => ICON unless quiet
+          say("Uploaded: #{asset}", :green) unless quiet      
+        else        
+          errors = response.parsed_response["errors"] if response.parsed_response
+          errors = errors.collect{|(key, value)| "#{value.join(', ')}"} if errors
+          notify "#{asset} \n #{errors}", :title => 'Upload Error', :icon => ICON unless quiet
+          say("Upload error: #{asset} - #{errors}\n", :red)      
+        end
       end   
     end
 
@@ -153,7 +158,7 @@ module ShopifyTheme
 					say("Rendered SASS: #{original_asset} => #{asset}", :magenta) unless quiet
 					true
 				rescue Sass::SyntaxError => e
-					notify "#{e.sass_filename}:#{e.sass_line} - \n #{e.message}", :title => 'Syntax Error', :icon => ICON unless quiet
+					notify "#{e.sass_filename}:#{e.sass_line} \n #{e.message}", :title => 'Syntax Error', :icon => ICON unless quiet
 					say("#{e.sass_filename}:#{e.sass_line} - #{e.message}", :red) unless quiet
 					false
 				end
@@ -163,12 +168,22 @@ module ShopifyTheme
 
     def delete_asset(key, quiet=false)
 			return if key =~ SASS_EXTENSION
-			if ShopifyParty.delete_asset(key).success?
+			#if ShopifyParty.delete_asset(key).success?
+      #  say("Removed: #{key}", :green) unless quiet
+      #else
+      #  say("Error: Could not remove #{key}", :red)
+      #end
+      response = ShopifyParty.delete_asset(key)      
+      if response.success?
         say("Removed: #{key}", :green) unless quiet
-      else
-        say("Error: Could not remove #{key}", :red)
+        notify "#{key}", :title => 'Removed Asset', :icon => ICON unless quiet     
+      else        
+        errors = response.parsed_response["errors"] if response.parsed_response
+        errors = errors.collect{|(key, value)| "#{value.join(', ')}"} if errors
+        notify "#{key} \n #{errors}", :title => 'Remove Error', :icon => ICON unless quiet
+        say("Error: Could not remove #{key} - #{errors}\n", :red)
       end
-    end    
+    end
 
     def notify(message, options={})
       return super if @growl_loaded
