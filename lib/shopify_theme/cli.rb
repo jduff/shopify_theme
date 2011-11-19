@@ -126,58 +126,52 @@ module ShopifyTheme
 
     def send_asset(asset, quiet=false)
       data = {:key => asset}
-      if compile_asset(asset, quiet)  
-	      if (content = File.read(asset)).is_binary_data? || BINARY_EXTENSIONS.include?(File.extname(asset).gsub('.',''))
-	        data.merge!(:attachment => Base64.encode64(content))
-	      else
-	        data.merge!(:value => content)
-	      end
+	    return if asset =~ SASS_EXTENSION && !compile_sass_asset(asset, quiet)
 
-        response = ShopifyParty.send_asset(data)      
-        if response.success?
-          notify "#{asset}", :title => 'Uploaded Asset', :icon => ICON unless quiet
-          say("Uploaded: #{asset}", :green) unless quiet      
-        else        
-          errors = response.parsed_response["errors"] if response.parsed_response
-          errors = errors.collect{|(key, value)| "#{value.join(', ')}"} if errors
-          notify "#{asset} \n #{errors}", :title => 'Upload Error', :icon => ICON unless quiet
-          say("Upload error: #{asset} - #{errors}\n", :red)      
-        end
-      end   
+      if (content = File.read(asset)).is_binary_data? || BINARY_EXTENSIONS.include?(File.extname(asset).gsub('.',''))
+        data.merge!(:attachment => Base64.encode64(content))
+      else
+        data.merge!(:value => content)
+      end
+
+      response = ShopifyParty.send_asset(data)
+      if response.success?
+        notify "#{asset}", :title => 'Uploaded Asset', :icon => ICON unless quiet
+        say("Uploaded: #{asset}", :green) unless quiet
+      else
+        errors = response.parsed_response["errors"] if response.parsed_response
+        errors = errors.collect{|(key, value)| "#{value.join(', ')}"} if errors
+        notify "#{asset} \n #{errors}", :title => 'Upload Error', :icon => ICON unless quiet
+        say("Upload error: #{asset} - #{errors}\n", :red)
+      end
     end
 
-		def compile_asset(asset, quiet=false)
-	    if asset =~ SASS_EXTENSION
-				begin
-					original_asset = asset
-					sass_engine = Sass::Engine.for_file(asset,{})
-					asset.gsub!(SASS_EXTENSION, '.css')
-					ignored_files.push(asset)
-					File.open(asset, 'w') {|f| f.write(sass_engine.render)}
-					notify "#{original_asset} => #{asset}", :title => 'Rendered SASS', :icon => ICON unless quiet
-					say("Rendered SASS: #{original_asset} => #{asset}", :magenta) unless quiet
-					true
-				rescue Sass::SyntaxError => e
-					notify "#{e.sass_filename}:#{e.sass_line} \n #{e.message}", :title => 'Syntax Error', :icon => ICON unless quiet
-					say("#{e.sass_filename}:#{e.sass_line} - #{e.message}", :red) unless quiet
-					false
-				end
-		  end
-		  true
+		def compile_sass_asset(asset, quiet=false)
+      begin
+        original_asset = asset
+        sass_engine = Sass::Engine.for_file(asset,{})
+        asset.gsub!(SASS_EXTENSION, '.css')
+        ignored_files.push(asset)
+
+        File.open(asset, 'w') {|f| f.write(sass_engine.render)}
+        notify "#{original_asset} => #{asset}", :title => 'Rendered SASS', :icon => ICON unless quiet
+        say("Rendered SASS: #{original_asset} => #{asset}", :magenta) unless quiet
+        true
+      rescue Sass::SyntaxError => e
+        notify "#{e.sass_filename}:#{e.sass_line} \n #{e.message}", :title => 'Syntax Error', :icon => ICON unless quiet
+        say("#{e.sass_filename}:#{e.sass_line} - #{e.message}", :red) unless quiet
+        false
+      end
 		end
 
     def delete_asset(key, quiet=false)
 			return if key =~ SASS_EXTENSION
-			#if ShopifyParty.delete_asset(key).success?
-      #  say("Removed: #{key}", :green) unless quiet
-      #else
-      #  say("Error: Could not remove #{key}", :red)
-      #end
-      response = ShopifyParty.delete_asset(key)      
+
+      response = ShopifyParty.delete_asset(key)
       if response.success?
         say("Removed: #{key}", :green) unless quiet
-        notify "#{key}", :title => 'Removed Asset', :icon => ICON unless quiet     
-      else        
+        notify "#{key}", :title => 'Removed Asset', :icon => ICON unless quiet
+      else
         errors = response.parsed_response["errors"] if response.parsed_response
         errors = errors.collect{|(key, value)| "#{value.join(', ')}"} if errors
         notify "#{key} \n #{errors}", :title => 'Remove Error', :icon => ICON unless quiet
