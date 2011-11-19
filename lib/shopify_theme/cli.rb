@@ -25,8 +25,8 @@ module ShopifyTheme
     def configure(api_key=nil, password=nil, store=nil)
       config = {:api_key => api_key, :password => password, :store => store}
       create_file('config.yml', config.to_yaml)
-	    say("Generated config.yml", :green)
-	    notify "config.yml", :title => 'Config Generated', :icon => ICON
+      say("Generated config.yml", :green)
+      notify "config.yml", :title => 'Config Generated', :icon => ICON
     end
 
     desc "download FILE", "download the shops current theme assets"
@@ -54,26 +54,26 @@ module ShopifyTheme
     desc "replace FILE", "completely replace shop theme assets with local theme assets"
     method_option :quiet, :type => :boolean, :default => true
     def replace(*keys)
-	    say("Are you sure you want to completely replace your shop theme assets? This is not undoable.", :yellow)
-	    if ask("Continue? (Y/N): ") == "Y"
-		    remote_assets = keys.empty? ? ShopifyParty.asset_list : keys
-	      remote_assets.each do |asset|
-	        delete_asset(asset, options['quiet'])
-	      end
-	      local_assets = keys.empty? ? local_assets_list : keys
-	      local_assets.each do |asset|
-	        send_asset(asset, true)
-	      end
-	      notify "#{remote_assets.size} Removed \n #{remote_assets.size} Uploaded", :title => 'Replaced Assets', :icon => ICON unless options['quiet']
-	      say("Done.", :green) unless options['quiet']
-		  end
+      say("Are you sure you want to completely replace your shop theme assets? This is not undoable.", :yellow)
+      if ask("Continue? (Y/N): ") == "Y"
+        remote_assets = keys.empty? ? ShopifyParty.asset_list : keys
+        remote_assets.each do |asset|
+          delete_asset(asset, options['quiet'])
+        end
+        local_assets = keys.empty? ? local_assets_list : keys
+        local_assets.each do |asset|
+          send_asset(asset, true)
+        end
+        notify "#{remote_assets.size} Removed \n #{remote_assets.size} Uploaded", :title => 'Replaced Assets', :icon => ICON unless options['quiet']
+        say("Done.", :green) unless options['quiet']
+      end
     end
 
     desc "remove FILE", "remove theme asset"
     method_option :quiet, :type => :boolean, :default => false
     def remove(*keys)
       keys.each do |key|
-				delete_asset(key, options['quiet'])
+        delete_asset(key, options['quiet'])
       end
       say("Done.", :green) unless options['quiet']
     end
@@ -84,20 +84,20 @@ module ShopifyTheme
     def watch
       FSSM.monitor '.' do |m|
         m.update do |base, relative|
-	        if !ignored_files.include?(relative)
-	          send_asset(relative, options['quiet']) if local_assets_list.include?(relative)
-	        else
-	          ignored_files.delete(relative)
-	        end
+          if !ignored_files.include?(relative)
+            send_asset(relative, options['quiet']) if local_assets_list.include?(relative)
+          else
+            ignored_files.delete(relative)
+          end
         end
         m.create do |base, relative|
           send_asset(relative, options['quiet']) if local_assets_list.include?(relative)
         end
         if !options['keep_files']
-	        m.delete do |base, relative|
-						delete_asset(relative, options['quiet'])
-		      end
-	      end
+          m.delete do |base, relative|
+            delete_asset(relative, options['quiet'])
+          end
+        end
       end
     end
 
@@ -126,7 +126,7 @@ module ShopifyTheme
 
     def send_asset(asset, quiet=false)
       data = {:key => asset}
-	    return if asset =~ SASS_EXTENSION && !compile_sass_asset(asset, quiet)
+      return if asset =~ SASS_EXTENSION && !compile_sass_asset(asset, quiet)
 
       if (content = File.read(asset)).is_binary_data? || BINARY_EXTENSIONS.include?(File.extname(asset).gsub('.',''))
         data.merge!(:attachment => Base64.encode64(content))
@@ -146,7 +146,7 @@ module ShopifyTheme
       end
     end
 
-		def compile_sass_asset(asset, quiet=false)
+    def compile_sass_asset(asset, quiet=false)
       begin
         original_asset = asset
         sass_engine = Sass::Engine.for_file(asset,{})
@@ -162,10 +162,10 @@ module ShopifyTheme
         say("#{e.sass_filename}:#{e.sass_line} - #{e.message}", :red) unless quiet
         false
       end
-		end
+    end
 
     def delete_asset(key, quiet=false)
-			return if key =~ SASS_EXTENSION
+      return if key =~ SASS_EXTENSION
 
       response = ShopifyParty.delete_asset(key)
       if response.success?
