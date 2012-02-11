@@ -3,7 +3,9 @@ module ShopifyTheme
   include HTTParty
 
   def self.asset_list
-    response = shopify.get("/admin/assets.json")
+    # HTTParty parser chokes on assest listing, have it noop
+    # and then use a rel JSON parser.
+    response = shopify.get("/admin/assets.json", :parser => Proc.new {|data, format| {} })
     assets = JSON.parse(response.body)["assets"].collect {|a| a['key'] }
     # Remove any .css files if a .css.liquid file exists
     assets.reject{|a| assets.include?("#{a}.liquid") }
